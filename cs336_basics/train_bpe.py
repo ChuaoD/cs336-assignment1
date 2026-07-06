@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import regex as re
 from collections import Counter
-from multiprocessing import Process
+from multiprocessing import Pool
+from functools import partial
 
 from .pretokenization_example import find_chunk_boundaries
 
@@ -34,6 +35,26 @@ def count_adjacent_pairs(
             pair_info[pair] = (pair_count + freq, token_set)
             token_pairs[token].append(pair)
     return pair_info, token_pairs
+
+def pre_tokenize_chunk(start_end: tuple[int, int], input_path, special_tokens):
+    '''
+    Pre-tokenize a chunk.
+    '''
+    pre_token_counts = Counter()
+    start, end = start_end
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start).decode("utf-8", errors="ignore")
+        # Remove special tokens before pre-tokenization
+        subchunks = re.split("|".join(re.escape(st) for st in special_tokens), chunk)
+        for subchunk in subchunks:
+            # Run pre-tokenization on subchunk and store the counts for each pre-token
+            pre_token_subcounts = Counter(
+                pretoken.group() for pretoken in re.finditer(PAT, subchunk)
+                )
+            pre_token_counts.update(pre_token_subcounts)
+
+    return pre_token_counts
 
 def merge(
     byte_seq: tuple[bytes, ...], 
@@ -95,28 +116,25 @@ def train_bpe(
         vocab[256 + i] = st.encode("utf-8")
     init_vocab_size = len(vocab)
 
-    # Pre-tokenization
+    # Parallelize pre-tokenization
     with open(input_path, "rb") as f:
         num_processes = 4
         boundaries = find_chunk_boundaries(f, num_processes,        
                                            SPLIT_SPECIAL_TOKEN)
-        # Parallelize pre-tokenization
-        pre_token_counts = Counter()
-        for start, end in zip(boundaries[:-1], boundaries[1:]):
-            f.seek(start)
-            chunk = f.read(end - start).decode("utf-8", errors="ignore")
-            # Remove special tokens before pre-tokenization
-            subchunks = re.split("|".join(re.escape(st) for st in special_tokens), chunk)
-            for subchunk in subchunks:
-                # Run pre-tokenization on subchunk and store the counts for each pre-token
-                pre_token_subcounts = Counter(
-                    pretoken.group() for pretoken in re.finditer(PAT, subchunk)
-                    )
-                pre_token_counts.update(pre_token_subcounts)
+    chunk_ranges = list(zip(boundaries[:-1], boundaries[1:]))
+    worker = partial(pre_tokenize_chunk, 
+                     input_path=input_path, special_tokens=special_tokens)
+    with Pool(num_processes) as pool:
+        pre_token_subcounts = pool.map(worker, chunk_ranges)
+
+    pre_token_counts = Counter()
+    for subcounts in pre_token_subcounts:
+        pre_token_counts.update(subcounts)
+
     pre_tokens: dict[tuple[bytes, ...], int] = {
         tuple(bytes([b]) for b in k.encode("utf-8")): v 
         for k, v in pre_token_counts.items()
-        }
+    }
     
     # Compute BPE merges
     num_merges = vocab_size - init_vocab_size
