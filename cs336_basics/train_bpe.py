@@ -11,22 +11,34 @@ SPLIT_SPECIAL_TOKEN = b"<|endoftext|>"
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 def count_adjacent_pairs(
-        byte_seq: tuple[bytes, ...],
-        freq: int,
-        counts: dict[tuple[bytes, ...], int] | None = None):
+    pre_tokens: dict[tuple[bytes, ...], int]
+) -> tuple[
+    dict[tuple[bytes, bytes], tuple[int, set[tuple[bytes, ...]]]],
+    dict[tuple[bytes, ...], list[tuple[bytes, bytes]]]
+]:
     '''
-    Given a tuple of bytes, and its frequency in the text,
-    return a dictionary of counts of consecutive pairs
-    Example:
-    (b'b', b'a', b'n', b'a', b'n', b'a'), 2 
-    -> {(b'b', b'a'): 2, (b'a', b'n'): 4, (b'n', b'a'): 4}
+    Given pre-tokenized text,
+    return a mapping from pairs to count and tokens containing the pair,
+    and a mapping from tokens to contained pairs. 
     '''
-    counts = {} if counts is None else counts
-    for pair in zip(byte_seq, byte_seq[1:]):
-        counts[pair] = counts.get(pair, 0) + freq
-    return counts
+    pair_info = {}
+    token_pairs = {}
+    for token, freq in pre_tokens.items():
+        token_pairs[token] = []
+        # Count the number of occurrences of each pair of tokens
+        for pair in zip(token, token[1:]):
+            if pair not in pair_info:
+                pair_info[pair] = (0, set())
+            pair_count, token_set = pair_info[pair]
+            token_set.add(token)
+            pair_info[pair] = (pair_count + freq, token_set)
+            token_pairs[token].append(pair)
+    return pair_info, token_pairs
 
-def merge(byte_seq: tuple[bytes, ...], pair: tuple[bytes, bytes]) -> tuple[bytes, ...]:
+def merge(
+    byte_seq: tuple[bytes, ...], 
+    pair: tuple[bytes, bytes]
+) -> tuple[bytes, ...]:
     '''
     Given a tuple of bytes, replace all consecutive occurrences of pair of bytes object with one bytes object.
     Example:
@@ -109,31 +121,37 @@ def train_bpe(
     # Compute BPE merges
     num_merges = vocab_size - init_vocab_size
     merges: list[tuple[bytes, bytes]] = []
-    
+    pair_info, token_pairs = count_adjacent_pairs(pre_tokens)
+
     for i in range(num_merges):
-        counts = {}
-        for byte_seq, freq in pre_tokens.items():
-            # Count the number of occurrences of each pair of tokens
-            count_adjacent_pairs(byte_seq, freq, counts)
         # Find the pair with the highest count
         # Break ties by preferring the lexicographically greater pair
-        pair = max(counts.items(), key=lambda x: (x[1], x[0]))[0]
-        # Merge the pair
-        pre_tokens = {merge(k, pair): v for k, v in pre_tokens.items()}
+        pair = max(pair_info, key=lambda k: (pair_info[k][0], k))
+        # Find the tokens containig the pair to merge
+        affected_tokens = pair_info[pair][1].copy()
+        for old_token in affected_tokens:
+            token_freq = pre_tokens[old_token]
+            # Remove the contribution of the affected token to all its pairs
+            for p in token_pairs[old_token]:
+                pair_count, token_set = pair_info[p]
+                token_set.discard(old_token)
+                pair_info[p] = (pair_count - token_freq, token_set)
+            # Merge the pair in the affected token
+            merged_token = merge(old_token, pair)
+            pre_tokens[merged_token] = pre_tokens.pop(old_token)
+            token_pairs.pop(old_token)
+            token_pairs[merged_token] = []
+            # Recompute pair counts for the affected token
+            for p in zip(merged_token, merged_token[1:]):
+                if p not in pair_info:
+                    pair_info[p] = (0, set())
+                pair_count, token_set = pair_info[p]
+                token_set.add(merged_token)
+                pair_info[p] = (pair_count + token_freq, token_set)
+                token_pairs[merged_token].append(p)
+        pair_info.pop(pair)  # no zero-count pairs
         merges.append(pair)
         idx = init_vocab_size + i 
         vocab[idx] = pair[0] + pair[1]
 
     return vocab, merges
-
-
-'''
-find the most frequent pair
-jump to only the words containing that pair
-update only those words
-fix only the pair counts affected by those changed words
-
-
-pair_counts = global popularity of each pair
-pair_to_words = where each pair appears
-word_to_pairs = what pairs each word currently has'''

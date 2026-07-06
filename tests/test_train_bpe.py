@@ -8,7 +8,7 @@ from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
 def test_train_bpe_speed():
     """
     Ensure that BPE training is relatively efficient by measuring training
-    time on this small dataset and throwing an error if it takes more than 1.5 seconds.
+    time on this small dataset and throwing an error if it takes more than 0.5 seconds.
     This is a pretty generous upper-bound, it takes 0.38 seconds with the
     reference implementation on my laptop. In contrast, the toy implementation
     takes around 3 seconds.
@@ -21,7 +21,7 @@ def test_train_bpe_speed():
         special_tokens=["<|endoftext|>"],
     )
     end_time = time.time()
-    assert end_time - start_time < 1.5
+    assert end_time - start_time < 0.5
 
 
 def test_train_bpe():
