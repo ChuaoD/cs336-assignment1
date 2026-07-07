@@ -93,10 +93,7 @@ def train_bpe(
     Args:
         input_path (str | os.PathLike): Path to BPE tokenizer training data.
         vocab_size (int): Total number of items in the tokenizer's vocabulary (including special tokens).
-        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary.
-            These strings will never be split into multiple tokens, and will always be
-            kept as a single token. If these special tokens occur in the `input_path`,
-            they are treated as any other string.
+        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary. These strings will never be split into multiple tokens, and will always be kept as a single token. If these special tokens occur in the `input_path`,they are treated as any other string.
 
     Returns:
         tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
@@ -118,7 +115,7 @@ def train_bpe(
 
     # Parallelize pre-tokenization
     with open(input_path, "rb") as f:
-        num_processes = 4
+        num_processes = 16
         boundaries = find_chunk_boundaries(f, num_processes,        
                                            SPLIT_SPECIAL_TOKEN)
     chunk_ranges = list(zip(boundaries[:-1], boundaries[1:]))

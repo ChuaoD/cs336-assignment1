@@ -10,6 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from cs336_basics.train_bpe import train_bpe
+from cs336_basics.tokenizer import Tokenizer
 
 
 def run_linear(
@@ -550,18 +551,15 @@ def get_tokenizer(
     return a BPE tokenizer that uses the provided vocab, merges, and special tokens.
 
     Args:
-        vocab (dict[int, bytes]): The tokenizer vocabulary, a mapping from int (token ID in the vocabulary)
-            to bytes (token bytes)
-        merges (list[tuple[bytes, bytes]]): BPE merges. Each list item is a tuple of bytes (<token1>, <token2>),
-            representing that <token1> was merged with <token2>.
-            Merges are ordered by order of creation.
-        special_tokens (list[str] | None): A list of string special tokens for the tokenizer. These strings will never
-            be split into multiple tokens, and will always be kept as a single token.
+        vocab (dict[int, bytes]): The tokenizer vocabulary, a mapping from int (token ID in the vocabulary) to bytes (token bytes)
+        merges (list[tuple[bytes, bytes]]): BPE merges. Each list item is a tuple of bytes (<token1>, <token2>), representing that <token1> was merged with <token2>. Merges are ordered by order of creation.
+        special_tokens (list[str] | None): A list of string special tokens for the tokenizer. These strings will never be split into multiple tokens, and will always be kept as a single token.
 
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return Tokenizer(vocab, merges, special_tokens)
+    
 
 
 def run_train_bpe(
@@ -576,10 +574,7 @@ def run_train_bpe(
     Args:
         input_path (str | os.PathLike): Path to BPE tokenizer training data.
         vocab_size (int): Total number of items in the tokenizer's vocabulary (including special tokens).
-        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary.
-            These strings will never be split into multiple tokens, and will always be
-            kept as a single token. If these special tokens occur in the `input_path`,
-            they are treated as any other string.
+        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary. These strings will never be split into multiple tokens, and will always be kept as a single token. If these special tokens occur in the `input_path`, they are treated as any other string.
 
     Returns:
         tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
