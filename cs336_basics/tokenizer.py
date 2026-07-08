@@ -66,10 +66,10 @@ class Tokenizer:
         '''
         Encode an input text without special tokens.
         '''
-        # Pre-tokenization
-        pre_tokens = re.findall(PAT, text)
         indices = []
-        for token in pre_tokens:
+        # Pre-tokenization
+        for match in re.finditer(PAT, text):
+            token = match.group()
             # str -> tuple[bytes]
             token_bytes = tuple(bytes([b]) for b in token.encode("utf-8"))
             # Apply the merge
@@ -86,14 +86,19 @@ class Tokenizer:
         if not self.special_tokens:
             return self._encode_ordinary(text)
         
-        special_pattern = "(" + "|".join(re.escape(st) for st in self.special_tokens) + ")"
-        chunks = re.split(special_pattern, text)
+        special_pattern = "|".join(re.escape(st) for st in self.special_tokens)
         indices = []
-        for subchunk in chunks:
-            if subchunk in self.special_tokens:
-                indices.append(self.special_tokens[subchunk])
-            else:
-                indices.extend(self._encode_ordinary(subchunk))
+        pos = 0
+        for match in re.finditer(special_pattern, text):
+            chunk = text[pos: match.start()]
+            # Encode text without special token
+            indices.extend(self._encode_ordinary(chunk))
+            special_token = match.group()
+            # Encode the special token
+            indices.append(self.special_tokens[special_token])
+            pos = match.end()
+        # Encode the text after the last special token
+        indices.extend(self._encode_ordinary(text[pos:]))
         return indices
     
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
