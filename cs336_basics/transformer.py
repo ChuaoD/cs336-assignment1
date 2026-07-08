@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn import init
 from torch.nn.parameter import Parameter
-from einops import reduce
+from einops import reduce, rearrange, einsum
 
 from .linear import Linear
 
@@ -28,8 +28,7 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-        self.w1_weight = Parameter(torch.ones(d_model, device=device, dtype=dtype),
-                               requires_grad=True)
+        self.weight = Parameter(torch.ones(d_model, device=device, dtype=dtype), requires_grad=True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         '''
@@ -75,4 +74,56 @@ class SwiGLU(nn.Module):
         out1 = self.linear1(x)
         out_silu = out1 * torch.sigmoid(out1)
         return self.linear2(out_silu * self.linear3(x))
-      
+    
+class RotaryPositionalEmbedding(nn.Module):
+    
+    def __init__(self, 
+                 theta: float, 
+                 d_k: int, 
+                 max_seq_len: int, 
+                 device: torch.device | None = None):
+        '''
+        Construct the RoPE module and create buffers.
+
+        Args:
+            theta: Theta value for the RoPE
+            d_k: Dimension of query and key vectors
+            max_seq_len: Maximum sequence length that will be input
+            device: Device to store the buffer on
+        '''
+        super().__init__()
+        assert d_k % 2 == 0
+        num_pairs = d_k // 2
+        freq = theta ** (-2 * torch.arange(num_pairs, device=device) / d_k)
+        freq = rearrange(freq, "d -> 1 d")
+        position = torch.arange(max_seq_len, device=device)
+        position = rearrange(position, "seq_len -> seq_len 1")
+        self.register_buffer("sin", torch.sin(position * freq), 
+                             persistent=False)  # (max_seq_len, num_pairs)
+        self.register_buffer("cos", torch.cos(position * freq), 
+                             persistent=False)  # (max_seq_len, num_pairs)
+
+    def forward(self, 
+                x: torch.Tensor, 
+                token_positions: torch.Tensor
+    ) -> torch.Tensor:
+        '''
+        Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape. The token positions are a tensor of shape (..., seq_len) specifying the token positions of x.
+        '''
+        x_paired = rearrange(x, "... seq_len (num_pairs pair_dim) -> ... seq_len num_pairs pair_dim", pair_dim=2)
+        result = torch.empty_like(x_paired)
+
+        cos = self.cos[token_positions]
+        sin = self.sin[token_positions]
+        cos = rearrange(cos, "seq_len num_pairs -> seq_len num_pairs 1")
+        sin = rearrange(sin, "seq_len num_pairs -> seq_len num_pairs 1")
+        
+        cos_res = cos * x_paired
+        sin_res = sin * x_paired
+
+        result[..., 0] = cos_res[..., 0] - sin_res[..., 1]
+        result[..., 1] = sin_res[..., 0] + cos_res[..., 1]
+
+        result = rearrange(result, "... seq_len num_pairs pair_dim -> ... seq_len (num_pairs pair_dim)", pair_dim=2)
+  
+        return result
