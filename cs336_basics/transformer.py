@@ -8,6 +8,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from .linear import Linear
+from .embedding import Embedding
 
 
 class RMSNorm(nn.Module):
@@ -68,14 +69,14 @@ class SwiGLU(nn.Module):
             d_ff = round(8.0 / 3.0 * d_model / 64) * 64
         self.d_ff = d_ff
 
-        self.linear1 = Linear(d_model, d_ff, device=device, dtype=dtype)
-        self.linear2 = Linear(d_ff, d_model, device=device, dtype=dtype)
-        self.linear3 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
     
     def forward(self, x: Tensor) -> Tensor:
-        out1 = self.linear1(x)
+        out1 = self.w1(x)
         out_silu = out1 * torch.sigmoid(out1)
-        return self.linear2(out_silu * self.linear3(x))
+        return self.w2(out_silu * self.w3(x))
     
 class RotaryPositionalEmbedding(nn.Module):
     
@@ -108,7 +109,7 @@ class RotaryPositionalEmbedding(nn.Module):
 
     def forward(self, 
                 x: torch.Tensor, 
-                token_positions: torch.Tensor
+                token_positions: torch.Tensor | None = None
     ) -> torch.Tensor:
         '''
         Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape. The token positions are a tensor of shape (..., seq_len) specifying the token positions of x.
@@ -116,11 +117,13 @@ class RotaryPositionalEmbedding(nn.Module):
         x_paired = rearrange(x, "... seq_len (num_pairs pair_dim) -> ... seq_len num_pairs pair_dim", pair_dim=2)
         output = torch.empty_like(x_paired)
 
+        if token_positions is None:
+            token_positions = torch.arange(x.shape[-2])
         cos = self.cos[token_positions]
         sin = self.sin[token_positions]
         cos = rearrange(cos, "... seq_len num_pairs -> ... seq_len num_pairs 1")
         sin = rearrange(sin, "... seq_len num_pairs -> ... seq_len num_pairs 1")
-        
+
         cos_res = cos * x_paired
         sin_res = sin * x_paired
 
@@ -180,7 +183,7 @@ class MultiheadAttention(nn.Module):
         self.q_proj = Linear(d_model, num_heads * d_k, device=device)
         self.k_proj = Linear(d_model, num_heads * d_k, device=device)
         self.v_proj = Linear(d_model, num_heads * d_v, device=device)
-        self.o_proj = Linear(num_heads * d_v, d_model, device=device)
+        self.output_proj = Linear(num_heads * d_v, d_model, device=device)
         
         
     def forward(self, 
@@ -204,6 +207,55 @@ class MultiheadAttention(nn.Module):
         att = attention(Q, K, V, mask)
         att = rearrange(att, "... num_heads seq_len d_v -> ... seq_len (num_heads d_v)")
 
-        output = self.o_proj(att)
+        output = self.output_proj(att)
 
         return output
+    
+class TransformerBlock(nn.Module):
+    def __init__(self,
+                 d_model: int,
+                 num_heads: int, 
+                 d_ff: int,
+                 theta: float | None = None,
+                 max_seq_len: int | None = None,
+                 device: torch.device | None = None
+    ) -> None:
+        super().__init__()
+        self.ln1 = RMSNorm(d_model, device=device)
+        self.ln2 = RMSNorm(d_model, device=device)
+        self.ffn = SwiGLU(d_model, d_ff, device)
+        self.attn = MultiheadAttention(d_model, num_heads, with_rope=True,
+                                       theta=theta, max_seq_len=max_seq_len, device=device)
+    
+    def forward(self, x: Tensor, token_positions: Tensor | None = None):
+        out1 = x + self.attn(self.ln1(x), token_positions)
+        return out1 + self.ffn(self.ln2(out1))
+    
+class TransformerLM(nn.Module):
+    def __init__(self,
+                 vocab_size: int,
+                 context_length: int,
+                 num_layers: int,
+                 d_model: int,
+                 num_heads: int,
+                 d_ff: int,
+                 theta: float | None = None,
+                 device: torch.device | None = None
+    ) -> None:
+        super().__init__()
+        self.token_embeddings = Embedding(vocab_size, d_model, device=device)
+        self.layers = nn.ModuleList([
+            TransformerBlock(
+                d_model, num_heads, d_ff, theta=theta, max_seq_len=context_length, device=device
+            ) 
+            for _ in range(num_layers)
+        ])
+        self.ln_final = RMSNorm(d_model, device=device)
+        self.lm_head = Linear(d_model, vocab_size)
+
+    def forward(self, x: Tensor, token_positions: Tensor | None = None):
+        out = self.token_embeddings(x)
+        for layer in self.layers:
+            out = layer(out, token_positions)
+        out= self.ln_final(out)
+        return self.lm_head(out)
