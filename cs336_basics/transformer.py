@@ -1,9 +1,11 @@
 import math
 import torch
 import torch.nn as nn
-from torch.nn import init
 from torch.nn.parameter import Parameter
 from einops import reduce, rearrange, einsum
+
+from jaxtyping import Bool, Float, Int
+from torch import Tensor
 
 from .linear import Linear
 
@@ -38,10 +40,10 @@ class RMSNorm(nn.Module):
         x = x.to(torch.float32)
         
         rms = torch.sqrt(reduce(x * x, "b s d -> b s 1", "sum") / self.d_model + self.eps)
-        result = x / rms * self.weight
+        output = x / rms * self.weight
 
-        # Return the result in the original dtype
-        return result.to(in_dtype)
+        # Return the output in the original dtype
+        return output.to(in_dtype)
 
     
 class SwiGLU(nn.Module):
@@ -70,7 +72,7 @@ class SwiGLU(nn.Module):
         self.linear2 = Linear(d_ff, d_model, device=device, dtype=dtype)
         self.linear3 = Linear(d_model, d_ff, device=device, dtype=dtype)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         out1 = self.linear1(x)
         out_silu = out1 * torch.sigmoid(out1)
         return self.linear2(out_silu * self.linear3(x))
@@ -81,7 +83,8 @@ class RotaryPositionalEmbedding(nn.Module):
                  theta: float, 
                  d_k: int, 
                  max_seq_len: int, 
-                 device: torch.device | None = None):
+                 device: torch.device | None = None
+    ):
         '''
         Construct the RoPE module and create buffers.
 
@@ -111,19 +114,96 @@ class RotaryPositionalEmbedding(nn.Module):
         Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape. The token positions are a tensor of shape (..., seq_len) specifying the token positions of x.
         '''
         x_paired = rearrange(x, "... seq_len (num_pairs pair_dim) -> ... seq_len num_pairs pair_dim", pair_dim=2)
-        result = torch.empty_like(x_paired)
+        output = torch.empty_like(x_paired)
 
         cos = self.cos[token_positions]
         sin = self.sin[token_positions]
-        cos = rearrange(cos, "seq_len num_pairs -> seq_len num_pairs 1")
-        sin = rearrange(sin, "seq_len num_pairs -> seq_len num_pairs 1")
+        cos = rearrange(cos, "... seq_len num_pairs -> ... seq_len num_pairs 1")
+        sin = rearrange(sin, "... seq_len num_pairs -> ... seq_len num_pairs 1")
         
         cos_res = cos * x_paired
         sin_res = sin * x_paired
 
-        result[..., 0] = cos_res[..., 0] - sin_res[..., 1]
-        result[..., 1] = sin_res[..., 0] + cos_res[..., 1]
+        output[..., 0] = cos_res[..., 0] - sin_res[..., 1]
+        output[..., 1] = sin_res[..., 0] + cos_res[..., 1]
 
-        result = rearrange(result, "... seq_len num_pairs pair_dim -> ... seq_len (num_pairs pair_dim)", pair_dim=2)
+        output = rearrange(output, "... seq_len num_pairs pair_dim -> ... seq_len (num_pairs pair_dim)", pair_dim=2)
   
-        return result
+        return output
+
+def softmax(x: torch.Tensor, dim: int):
+    '''
+    Apply a softmax operation on a tensor.
+
+    Args:
+        x (Tensor): input
+        dim (int): Dimension along which softmax will be computed.
+    '''
+    scores = torch.exp(x - x.amax(dim=dim, keepdim=True))
+    return scores / scores.sum(dim=dim, keepdim=True)
+
+def attention(
+    Q: Float[Tensor, " ... num_q d_k"],
+    K: Float[Tensor, " ... num_k d_k"],
+    V: Float[Tensor, " ... num_k d_v"],
+    mask: Bool[Tensor, " ... num_q num_k"] | None = None,
+) -> Float[Tensor, " ... num_q d_v"]:
+
+    '''
+    Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V
+    '''
+    d_k = K.shape[-1]
+    score = einsum(Q, K, "... num_q d_k, ... num_k d_k -> ... num_q num_k") / math.sqrt(d_k)
+    if mask is not None:
+        score = score.masked_fill(~mask, value=float("-inf"))
+    probabilities = softmax(score, dim=-1)
+    output = einsum(probabilities, V, "... num_q num_k, ... num_k d_v -> ... num_q d_v")
+    return output
+
+class MultiheadAttention(nn.Module):
+    def __init__(self, 
+                 d_model: int,
+                 num_heads: int,
+                 with_rope: bool = False,
+                 theta: float = None,
+                 max_seq_len: int = None,
+                 device: torch.device | None = None
+    ) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.with_rope = with_rope
+        d_k = d_model // num_heads
+        d_v = d_k
+        if self.with_rope:
+            self.rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len, device)
+        self.q_proj = Linear(d_model, num_heads * d_k, device=device)
+        self.k_proj = Linear(d_model, num_heads * d_k, device=device)
+        self.v_proj = Linear(d_model, num_heads * d_v, device=device)
+        self.o_proj = Linear(num_heads * d_v, d_model, device=device)
+        
+        
+    def forward(self, 
+                x: Float[Tensor, " ... seq_len d_model"],
+                token_positions: Int[Tensor, "... seq_len"] | None = None
+    ):
+        
+        d_k = self.d_model // self.num_heads
+        d_v = d_k
+        Q = rearrange(self.q_proj(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k = d_k)
+        K = rearrange(self.k_proj(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k = d_k)
+        V = rearrange(self.v_proj(x), "... seq_len (num_heads d_v) -> ... num_heads seq_len d_v", d_v = d_v)
+
+        # Apply RoPE
+        if self.with_rope:
+            Q = self.rope(Q, token_positions)
+            K = self.rope(K, token_positions)
+
+        seq_len = x.shape[-2]
+        mask = torch.tril(torch.ones((seq_len, seq_len), dtype=torch.bool, device=x.device))
+        att = attention(Q, K, V, mask)
+        att = rearrange(att, "... num_heads seq_len d_v -> ... seq_len (num_heads d_v)")
+
+        output = self.o_proj(att)
+
+        return output
