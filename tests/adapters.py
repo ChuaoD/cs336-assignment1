@@ -11,10 +11,30 @@ from torch import Tensor
 
 from cs336_basics.train_bpe import train_bpe
 from cs336_basics.tokenizer import Tokenizer
-from cs336_basics.linear import Linear
-from cs336_basics.embedding import Embedding
-from cs336_basics.transformer import RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax, attention, MultiheadAttention, TransformerBlock, TransformerLM
-from cs336_basics.training import cross_entropy_loss, AdamW, lr_cosine_schedule, gradient_clipping, load_data
+from cs336_basics.model import (
+    Linear,
+    Embedding,
+    RMSNorm,
+    SwiGLU,
+    RotaryPositionalEmbedding,
+    MultiheadAttention,
+    TransformerBlock,
+    TransformerLM
+)
+from cs336_basics.utils import (
+    softmax,
+    silu,
+    cross_entropy_loss,
+    gradient_clipping,
+    attention
+)
+from cs336_basics.optimizer import (
+    AdamW,
+    lr_cosine_schedule
+)
+
+from cs336_basics.data_loader import load_data
+from cs336_basics.checkpoint import save_checkpoint, load_checkpoint
 
 
 def run_linear(
@@ -432,7 +452,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(
@@ -555,7 +575,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    return save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -576,7 +596,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(

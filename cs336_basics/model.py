@@ -1,14 +1,84 @@
 import math
 import torch
 import torch.nn as nn
+from torch.nn import init
 from torch.nn.parameter import Parameter
 from einops import reduce, rearrange, einsum
 
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Float, Int
 from torch import Tensor
 
-from .linear import Linear
-from .embedding import Embedding
+from .utils import silu, attention
+
+
+class Linear(nn.Module):
+    '''
+    Applies an affine linear transformation to the incoming data:
+    y = Wx.
+    '''
+    def __init__(self, 
+                 in_features: int, 
+                 out_features: int, 
+                 device: torch.device | None = None, 
+                 dtype: torch.dtype | None = None
+    ) -> None:
+        '''
+        Construct a linear transformation module. 
+        Args:
+            in_features: final dimension of the input
+            out_features: final dimension of the output
+            device: Device to store the parameters on
+            dtype: Data type of the parameters
+        '''
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        init_std = math.sqrt(2.0 / (in_features + out_features))
+        self.weight = Parameter(
+            init.trunc_normal_(
+                torch.empty((out_features, in_features), 
+                            device=device, dtype=dtype), 
+                mean=0.0, std=init_std, a=-3*init_std, b=3*init_std),
+            requires_grad=True)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        '''
+        Apply the linear transformation to the input.
+        ''' 
+        return einsum(x, self.weight, "... d_in, d_out d_in -> ... d_out")
+    
+
+class Embedding(nn.Module):
+    def __init__(self, 
+                 num_embeddings: int, 
+                 embedding_dim: int, 
+                 device: torch.device | None = None, 
+                 dtype: torch.dtype | None = None
+    ) -> None:
+        '''
+        Construct an embedding module.
+
+        Args:
+            num_embeddings: Size of the vocabulary
+            embedding_dim: Dimension of the embedding vectors
+            device: Device to store the parameters on
+            dtype: Data type of the parameters
+        '''
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.weight = Parameter(
+            init.trunc_normal_(
+                torch.empty((num_embeddings, embedding_dim), 
+                            device=device, dtype=dtype), 
+                mean=0.0, std=1.0, a=-3.0, b=3.0),
+            requires_grad=True)
+        
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        '''
+        Lookup the embedding vectors for the given token IDs.
+        '''
+        return self.weight[token_ids]
 
 
 class RMSNorm(nn.Module):
@@ -45,8 +115,8 @@ class RMSNorm(nn.Module):
 
         # Return the output in the original dtype
         return output.to(in_dtype)
-
     
+
 class SwiGLU(nn.Module):
     def __init__(self, 
                  d_model: int, 
@@ -74,9 +144,7 @@ class SwiGLU(nn.Module):
         self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
     
     def forward(self, x: Tensor) -> Tensor:
-        out1 = self.w1(x)
-        out_silu = out1 * torch.sigmoid(out1)
-        return self.w2(out_silu * self.w3(x))
+        return self.w2(silu(self.w1(x)) * self.w3(x))
     
 class RotaryPositionalEmbedding(nn.Module):
     
@@ -134,34 +202,6 @@ class RotaryPositionalEmbedding(nn.Module):
   
         return output
 
-def softmax(x: torch.Tensor, dim: int):
-    '''
-    Apply a softmax operation on a tensor.
-
-    Args:
-        x (Tensor): input
-        dim (int): Dimension along which softmax will be computed.
-    '''
-    scores = torch.exp(x - x.amax(dim=dim, keepdim=True))
-    return scores / scores.sum(dim=dim, keepdim=True)
-
-def attention(
-    Q: Float[Tensor, " ... num_q d_k"],
-    K: Float[Tensor, " ... num_k d_k"],
-    V: Float[Tensor, " ... num_k d_v"],
-    mask: Bool[Tensor, " ... num_q num_k"] | None = None,
-) -> Float[Tensor, " ... num_q d_v"]:
-
-    '''
-    Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V
-    '''
-    d_k = K.shape[-1]
-    score = einsum(Q, K, "... num_q d_k, ... num_k d_k -> ... num_q num_k") / math.sqrt(d_k)
-    if mask is not None:
-        score = score.masked_fill(~mask, value=float("-inf"))
-    probabilities = softmax(score, dim=-1)
-    output = einsum(probabilities, V, "... num_q num_k, ... num_k d_v -> ... num_q d_v")
-    return output
 
 class MultiheadAttention(nn.Module):
     def __init__(self, 
