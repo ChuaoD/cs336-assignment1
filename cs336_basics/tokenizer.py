@@ -1,5 +1,7 @@
 import regex as re
+import pickle
 from collections.abc import Iterable, Iterator
+from pathlib import Path
 from .train_bpe import merge
 
 
@@ -46,7 +48,20 @@ class Tokenizer:
             erges_filepath: str
             special_tokens: list[str] | None = None
         '''
-        pass
+        with vocab_filepath.open("rb") as file:
+            vocab = pickle.load(file)
+
+        with merges_filepath.open("rb") as file:
+            merges = pickle.load(file)
+
+        tokenizer = Tokenizer(
+            vocab=vocab,
+            merges=merges,
+            special_tokens=special_tokens
+        )
+
+        return tokenizer
+        
 
     def _apply_merge(self, token_bytes: tuple[bytes, ...]) -> tuple[bytes, ...]:
         '''

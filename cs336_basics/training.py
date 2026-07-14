@@ -1,10 +1,11 @@
 import math
 import torch
 from torch.nn.parameter import Parameter
-from einops import reduce, rearrange, einsum
 
 from collections.abc import Callable, Iterable
 from typing import Optional
+import numpy.typing as npt
+import numpy as np
 
 from jaxtyping import Float, Int
 from torch import Tensor
@@ -100,4 +101,88 @@ class AdamW(torch.optim.Optimizer):
                 state["v"] = v
 
         return loss
+    
+def lr_cosine_schedule(
+    it: int,
+    max_learning_rate: float,
+    min_learning_rate: float,
+    warmup_iters: int,
+    cosine_cycle_iters: int,
+):
+    """
+    Given the parameters of a cosine learning rate decay schedule (with linear
+    warmup) and an iteration number, return the learning rate at the given
+    iteration under the specified schedule.
 
+    Args:
+        it (int): Iteration number to get learning rate for.
+        max_learning_rate (float): alpha_max, the maximum learning rate for cosine learning rate schedule (with warmup).
+        min_learning_rate (float): alpha_min, the minimum / final learning rate for the cosine learning rate schedule (with warmup).
+        warmup_iters (int): T_w, the number of iterations to linearly warm-up the learning rate.
+        cosine_cycle_iters (int): T_c, the number of cosine annealing iterations.
+
+    Returns:
+        Learning rate at the given iteration under the specified schedule.
+    """
+
+    if (it < warmup_iters):
+        return it / warmup_iters * max_learning_rate
+    elif (it >= warmup_iters and it <= cosine_cycle_iters):
+        return min_learning_rate + 0.5 * (1 + math.cos((it - warmup_iters) / (cosine_cycle_iters - warmup_iters) * math.pi)) * (max_learning_rate - min_learning_rate)
+    else:
+        return min_learning_rate
+    
+def gradient_clipping(
+    parameters: Iterable[Parameter], 
+    max_l2_norm: float,
+    eps: float = 1e-6
+) -> None:
+    """Given a set of parameters, clip their combined gradients to have l2 norm at most max_l2_norm.
+
+    Args:
+        parameters (Iterable[torch.nn.Parameter]): collection of trainable parameters.
+        max_l2_norm (float): a positive value containing the maximum l2-norm.
+
+    The gradients of the parameters (parameter.grad) should be modified in-place.
+    """
+    parameters = list(parameters)
+    grad_squares = 0
+    for p in parameters:
+        grad = p.grad
+        if grad is not None:
+            grad_squares += (grad ** 2).sum()
+    l2_norm = math.sqrt(grad_squares.item())
+    if l2_norm > max_l2_norm:
+        for p in parameters:
+            if p.grad is not None:
+                p.grad *= max_l2_norm / (l2_norm + eps)
+
+def load_data(
+    dataset: npt.NDArray, 
+    batch_size: int, 
+    context_length: int, 
+    device: str
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Given a dataset (a 1D numpy array of integers) and a desired batch size and
+    context length, sample language modeling input sequences and their corresponding labels from the dataset.
+
+    Args:
+        dataset (np.array): 1D numpy array of integer token IDs in the dataset.
+        batch_size (int): Desired batch size to sample.
+        context_length (int): Desired context length of each sampled example.
+        device (str): PyTorch device string (e.g., 'cpu' or 'cuda:0') indicating the device to place the sampled input sequences and labels on.
+
+    Returns:
+        Tuple of torch.LongTensors of shape (batch_size, context_length). The first tuple item is the sampled input sequences, and the second tuple item is the corresponding language modeling labels.
+    """
+    # Sample batch_size contiguous sequences of length context_length
+    starts = np.random.randint(0,  len(dataset) - context_length, 
+                               size=batch_size)
+    sample_indices = starts[:, None] + np.arange(context_length)[None, :]
+    samples = torch.as_tensor(dataset[sample_indices], dtype=torch.long, 
+                              device=device)
+    label_indices = (starts + 1)[:, None] + np.arange(context_length)[None, :]
+    labels = torch.as_tensor(dataset[label_indices], dtype=torch.long, 
+                             device=device)
+    return samples, labels
