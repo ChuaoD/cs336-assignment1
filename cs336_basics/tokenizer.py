@@ -1,7 +1,6 @@
 import regex as re
 import pickle
 from collections.abc import Iterable, Iterator
-from pathlib import Path
 from .train_bpe import merge
 
 
@@ -20,7 +19,7 @@ class Tokenizer:
         '''
         init_vocab_size = len(vocab)
         self.vocab = vocab
-        self.merges = merges
+        self.merges = {m: rank for rank, m in enumerate(merges)}
         self.special_tokens = {}
         self.inverse_vocab = {v: k for k, v in self.vocab.items()}
         if special_tokens is not None:
@@ -36,7 +35,9 @@ class Tokenizer:
                     self.inverse_vocab[st_bytes] = next_id
                     self.special_tokens[st] = next_id
                     next_id += 1
-                    
+        # Cache for token-encoding mapping
+        self._token_cache: dict[str, list[int]] = {}  
+        self._token_cache_limit = 100000
 
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
@@ -68,10 +69,13 @@ class Tokenizer:
         Apply merges to token bytes.
         '''
         while len(token_bytes) >= 2:
-            pair_set = set(zip(token_bytes, token_bytes[1:]))
-            # Find the first pair in merges that is in the token
-            pair = next((p for p in self.merges if p in pair_set), None)
-            if pair is None:
+            adjacent_pairs = set(zip(token_bytes, token_bytes[1:]))
+            # Find the adjacent pair in merges with the lowest rank
+            pair = min(
+                adjacent_pairs, 
+                key=lambda x: self.merges.get(x, float("inf"))
+            )
+            if pair not in self.merges:
                 break
             token_bytes = merge(token_bytes, pair)
         return token_bytes
@@ -85,13 +89,18 @@ class Tokenizer:
         # Pre-tokenization
         for match in re.finditer(PAT, text):
             token = match.group()
-            # str -> tuple[bytes]
-            token_bytes = tuple(bytes([b]) for b in token.encode("utf-8"))
-            # Apply the merge
-            token_bytes = self._apply_merge(token_bytes)
-            # tuple[bytes] -> list[int]
-            token_ids = [self.inverse_vocab[b] for b in token_bytes]
-            indices.extend(token_ids)
+            cached_ids = self._token_cache.get(token)
+            if cached_ids is None:  # if no cache for the token
+                # str -> tuple[bytes]
+                token_bytes = tuple(bytes([b]) for b in token.encode("utf-8"))
+                # Apply the merge
+                token_bytes = self._apply_merge(token_bytes)
+                # tuple[bytes] -> list[int]
+                cached_ids = [self.inverse_vocab[b] for b in token_bytes]
+                # Add the token-encoding mapping if space permits
+                if len(self._token_cache) < self._token_cache_limit:
+                    self._token_cache[token] = cached_ids
+            indices.extend(cached_ids)
         return indices
 
     def encode(self, text: str) -> list[int]:

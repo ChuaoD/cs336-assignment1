@@ -42,7 +42,7 @@ def main():
         pickle.dump(vocab, f)
 
     with merges_path.open("wb") as f:
-        pickle.dump(merges, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(merges, f)
 
 
 if __name__ == "__main__":
