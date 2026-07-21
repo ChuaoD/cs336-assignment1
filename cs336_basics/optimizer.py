@@ -29,7 +29,7 @@ class AdamW(torch.optim.Optimizer):
         if not (
             (isinstance(betas[0], float) and isinstance(betas[1], float))
         ):
-            raise ValueError("betas must be either both floats or both Tensors")
+            raise ValueError("betas must be either both floats")
 
         defaults = {
             "lr": lr,

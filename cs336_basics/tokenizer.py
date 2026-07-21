@@ -3,7 +3,7 @@ import pickle
 from collections.abc import Iterable, Iterator
 from .train_bpe import merge
 
-
+EOF_TOKEN = "<|endoftext|>"
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 class Tokenizer:
@@ -141,3 +141,6 @@ class Tokenizer:
         text_bytes = b''.join(self.vocab[id] for id in ids)
         text = text_bytes.decode("utf-8", errors='replace')
         return text
+    
+    def is_eof(self, id: int) -> bool:
+        return id == self.special_tokens[EOF_TOKEN]

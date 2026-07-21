@@ -21,15 +21,16 @@ def silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
     """
     return in_features * torch.sigmoid(in_features)
 
-def softmax(x: torch.Tensor, dim: int):
+def softmax(x: torch.Tensor, dim: int, temperature: float = 1.0):
     '''
-    Apply a softmax operation on a tensor.
+    Apply a softmax operation with temperature scaling on a tensor.
 
     Args:
         x (Tensor): input
-        dim (int): Dimension along which softmax will be computed.
+        dim (int): dimension along which softmax will be computed
+        temperature (float): temperature parameter 
     '''
-    scores = torch.exp(x - x.amax(dim=dim, keepdim=True))
+    scores = torch.exp(x - x.amax(dim=dim, keepdim=True)) / temperature
     return scores / scores.sum(dim=dim, keepdim=True)
 
 def attention(
