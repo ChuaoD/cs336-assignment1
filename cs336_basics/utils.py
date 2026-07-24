@@ -77,8 +77,8 @@ def gradient_clipping(
                 p.grad *= max_l2_norm / (l2_norm + eps)
 
 def cross_entropy_loss(
-    inputs: Float[Tensor, "batch_size vocab_size"], 
-    targets: Int[Tensor, " batch_size"]
+    inputs: Float[Tensor, "... vocab_size"], 
+    targets: Int[Tensor, "..."]
 ) -> Float[Tensor, ""]:
     '''
     Given a tensor of inputs and targets, compute the average cross-entropy
@@ -91,13 +91,14 @@ def cross_entropy_loss(
     Returns:
         The average cross-entropy loss across examples.
     '''
-    batch_size = inputs.shape[0]
     inputs_shifted = inputs - inputs.amax(dim=-1, keepdim=True)
     score_sum = torch.exp(inputs_shifted).sum(-1)
     loss = (
         torch.log(score_sum) 
-        - inputs_shifted[torch.arange(batch_size, device=inputs.device), 
-                         targets]
+        - torch.gather(
+            inputs_shifted, 
+            dim=-1, 
+            index=targets.unsqueeze(-1)).squeeze(-1)
     )
     
     return loss.mean()
