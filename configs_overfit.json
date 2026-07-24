@@ -1,0 +1,50 @@
+{
+  "data": {
+    "train_path": "TinyStories/training_ids.bin",
+    "validation_path": "TinyStories/valid_ids.bin",
+    "dtype": "uint16"
+  },
+
+  "model": {
+    "vocab_size": 10000,
+    "context_length": 32,
+    "d_model": 512,
+    "num_layers": 4,
+    "num_heads": 16,
+    "d_ff": 1344,
+    "theta": 10000.0
+  },
+
+  "optimizer": {
+    "lr": 1e-3,
+    "betas": [0.9, 0.95],
+    "eps": 1e-6,
+    "weight_decay": 0.01
+  },
+
+  "training": {
+    "batch_size": 4,
+    "max_iters": 1000,
+    "gradient_clip_max_norm": 1.0,
+    "device": "cpu"
+  },
+
+  "evaluation": {
+    "interval": 200,
+    "num_eval_batches": 20
+  },
+
+  "checkpoint": {
+    "interval": 500,
+    "output_dir": "checkpoints",
+    "resume_from": null
+  },
+
+  "logging": {
+  "interval": 10,
+  "use_wandb": true,
+  "wandb_mode": "online",
+  "project": "cs336-transformer",
+  "run_name": "baseline-small"
+  }
+}

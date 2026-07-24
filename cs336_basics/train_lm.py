@@ -85,9 +85,9 @@ def train(config_path: Path):
     logging_config = config["logging"]
     logging_interval = logging_config["interval"]
     wandb_mode = (
-    logging_config["wandb_mode"]
-    if logging_config["use_wandb"]
-    else "disabled"
+        logging_config["wandb_mode"]
+        if logging_config["use_wandb"]
+        else "disabled"
     )
     wandb.init(
         project=logging_config["project"],
@@ -116,10 +116,7 @@ def train(config_path: Path):
         # Forward pass
         logits = model(inputs)
         # Compute loss
-        loss = cross_entropy_loss(
-            logits.reshape(-1, logits.shape[-1]), 
-            targets.reshape(-1)
-        )
+        loss = cross_entropy_loss(logits, targets)
         # Compute gradients
         loss.backward()
         # Clip gradient
@@ -157,10 +154,7 @@ def train(config_path: Path):
                     valid_inputs, valid_targets = load_data(validation_data, batch_size, context_length, device)
 
                     valid_logits = model(valid_inputs)
-                    valid_loss = cross_entropy_loss(
-                        valid_logits.reshape(-1, valid_logits.shape[-1]), 
-                        valid_targets.reshape(-1)
-                    )
+                    valid_loss = cross_entropy_loss(valid_logits, valid_targets)
                     total_valid_loss += valid_loss.item()
                 avg_valid_loss = total_valid_loss / num_eval_batches
                 print(f"\nEvaluation after {iter + 1} iterations.")

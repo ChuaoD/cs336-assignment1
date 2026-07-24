@@ -1,7 +1,7 @@
 {
   "data": {
     "train_path": "TinyStories/training_ids.bin",
-    "validation_path": "TinyStories/validation_ids.bin",
+    "validation_path": "TinyStories/valid_ids.bin",
     "dtype": "uint16"
   },
 
@@ -30,7 +30,7 @@
   },
 
   "training": {
-    "batch_size": 256,
+    "batch_size": 32,
     "max_iters": 5000,
     "gradient_clip_max_norm": 1.0,
     "device": "cpu"
