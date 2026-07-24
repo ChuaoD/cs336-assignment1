@@ -163,7 +163,7 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "config_path",
+        "--config_path",
         type=Path,
         help="Path to the configuration file"
     )

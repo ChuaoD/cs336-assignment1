@@ -17,6 +17,7 @@ import torch
 import numpy as np
 import wandb
 import argparse
+import time
 
 import json
 from pathlib import Path
@@ -103,6 +104,8 @@ def train(config_path: Path):
     total_train_loss = 0
     num_log_batches = 0
 
+    start_time = time.perf_counter()
+
     for iter in range(start_iter, max_iters):
         model.train()
         # Determine learning rate
@@ -134,13 +137,16 @@ def train(config_path: Path):
         # Periodic logging
         if completed_iters % logging_interval == 0:
             avg_train_loss = total_train_loss / num_log_batches
+            elapsed_time = time.perf_counter() - start_time
             print(f"\nCompleted training {completed_iters} iterations.")
+            print(f"\nElapsed time: {elapsed_time}.")
             print(f"\nAverage training loss: {avg_train_loss:.4f}.")
             print(f"\nNumber of tokens processed: {num_log_batches * batch_size * context_length}.\n")
             wandb.log({
                 "iter": completed_iters,
                 "train/avg_loss": avg_train_loss,
                 "train/learning_rate": current_lr,
+                "train/elapsed_time": elapsed_time
             })
             total_train_loss = 0
             num_log_batches = 0
@@ -157,11 +163,14 @@ def train(config_path: Path):
                     valid_loss = cross_entropy_loss(valid_logits, valid_targets)
                     total_valid_loss += valid_loss.item()
                 avg_valid_loss = total_valid_loss / num_eval_batches
+                elapsed_time = time.perf_counter() - start_time
                 print(f"\nEvaluation after {iter + 1} iterations.")
+                print(f"\nElapsed time: {elapsed_time}.")
                 print(f"\nAverage evaluation loss on {num_eval_batches} batches: {avg_valid_loss:.4f}.\n")
                 wandb.log({
                     "iter": completed_iters,
-                    "valid/avg_loss": avg_valid_loss
+                    "valid/avg_loss": avg_valid_loss,
+                    "valid/elapsed_time": elapsed_time
                 })
                 if avg_valid_loss < best_validation_loss:
                     best_validation_loss = avg_valid_loss

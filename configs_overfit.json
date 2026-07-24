@@ -24,13 +24,13 @@
 
   "training": {
     "batch_size": 4,
-    "max_iters": 1000,
+    "max_iters": 500,
     "gradient_clip_max_norm": 1.0,
     "device": "cpu"
   },
 
   "evaluation": {
-    "interval": 200,
+    "interval": 20,
     "num_eval_batches": 20
   },
 
