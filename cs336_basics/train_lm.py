@@ -109,7 +109,7 @@ def train(config_path: Path):
     for iter in range(start_iter, max_iters):
         model.train()
         # Determine learning rate
-        current_lr = lr_cosine_schedule(iter + 1, **config["scheduler"])
+        current_lr = lr_cosine_schedule(iter, **config["scheduler"])
         for param_group in optimizer.param_groups:
             param_group["lr"] = current_lr
         # Load data batch
@@ -191,7 +191,7 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "config_path",
+        "--config_path",
         type=Path,
         help="Path to the configuration file"
     )
