@@ -292,6 +292,7 @@ class TransformerLM(nn.Module):
         ])
         self.ln_final = RMSNorm(d_model, device=device)
         self.lm_head = Linear(d_model, vocab_size, device=device)
+        self.device = device
 
     def forward(self, x: Tensor, token_positions: Tensor | None = None):
         out = self.token_embeddings(x)

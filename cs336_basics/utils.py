@@ -30,7 +30,8 @@ def softmax(x: torch.Tensor, dim: int, temperature: float = 1.0):
         dim (int): dimension along which softmax will be computed
         temperature (float): temperature parameter 
     '''
-    scores = torch.exp(x - x.amax(dim=dim, keepdim=True)) / temperature
+    scaled_x = x / temperature
+    scores = torch.exp(scaled_x - scaled_x.amax(dim=dim, keepdim=True))
     return scores / scores.sum(dim=dim, keepdim=True)
 
 def attention(
