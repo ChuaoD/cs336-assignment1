@@ -1,0 +1,26 @@
+program: cs336_basics.train_lm
+project: cs336-transformer
+name: learning-rate-grid
+method: grid
+
+metric:
+  name: valid/avg_loss
+  goal: minimize
+
+parameters:
+  learning_rate:
+    values:
+      - 0.005
+      - 0.01
+      - 0.03
+      - 0.05
+
+command:
+  - ${env}
+  - .venv/bin/python
+  - -u
+  - -m
+  - ${program}
+  - --config_path
+  - configs.json
+  - ${args}

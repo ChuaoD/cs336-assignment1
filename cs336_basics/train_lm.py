@@ -36,12 +36,17 @@ def load_best_loss(path: Path) -> float:
 
     return float(data["best_validation_loss"])
 
-def train(config_path: Path):
+def train(config_path: Path, learning_rate: float | None = None):
 
     # Read configuration
     with config_path.open("r", encoding="utf-8") as file:
         config = json.load(file)
-    
+
+    if learning_rate is not None:
+        config["optimizer"]["lr"] = learning_rate
+        config["scheduler"]["max_learning_rate"] = learning_rate
+        config["scheduler"]["min_learning_rate"] = learning_rate * 0.1
+
     # Load train and valididation dataset
     data_config = config["data"]
     train_path = data_config["train_path"]
@@ -70,7 +75,9 @@ def train(config_path: Path):
     # Restart from the checkpoint if any
     checkpoint = config["checkpoint"]["resume_from"]
     checkpoint_interval = config["checkpoint"]["interval"]
-    checkpoint_out_dir = Path(config["checkpoint"]["output_dir"])
+    checkpoint_out_dir = (
+        Path(config["checkpoint"]["output_dir"]) / f"lr-{lr:g}"
+    )
     checkpoint_out_dir.mkdir(parents=True, exist_ok=True)
     best_validation_loss = float("inf")
     best_loss_path = checkpoint_out_dir / "best_loss.json"
@@ -92,7 +99,7 @@ def train(config_path: Path):
     )
     wandb.init(
         project=logging_config["project"],
-        name=logging_config["run_name"],
+        name=f"{logging_config['run_name']}-lr-{lr:g}",
         config={
             "batch_size": batch_size,
             "learning_rate": lr,
@@ -196,9 +203,15 @@ def main() -> None:
         help="Path to the configuration file"
     )
 
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=None,
+    )
+
     args = parser.parse_args()
 
-    train(args.config_path)
+    train(args.config_path, args.learning_rate)
 
 if __name__ == "__main__":
     main()
