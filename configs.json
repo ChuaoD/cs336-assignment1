@@ -23,35 +23,35 @@
   },
 
   "scheduler": {
-    "warmup_iters": 100,
-    "cosine_cycle_iters": 5000,
+    "warmup_iters": 400,
+    "cosine_cycle_iters": 20000,
     "min_learning_rate": 1e-4,
     "max_learning_rate": 1e-3
   },
 
   "training": {
-    "batch_size": 32,
-    "max_iters": 5000,
+    "batch_size": 64,
+    "max_iters": 20000,
     "gradient_clip_max_norm": 1.0,
-    "device": "cpu"
+    "device": "cuda"
   },
 
   "evaluation": {
-    "interval": 200,
+    "interval": 800,
     "num_eval_batches": 20
   },
 
   "checkpoint": {
-    "interval": 500,
-    "output_dir": "checkpoints",
+    "interval": 5000,
+    "output_dir": "/pscratch/sd/c/chuao/cs336-assignment1/checkpoints",
     "resume_from": null
   },
 
   "logging": {
-  "interval": 10,
+  "interval": 50,
   "use_wandb": true,
   "wandb_mode": "online",
   "project": "cs336-transformer",
-  "run_name": "baseline-small"
+  "run_name": "baseline-gpu"
   }
 }
