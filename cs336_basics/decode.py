@@ -5,8 +5,6 @@ from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.model import TransformerLM
 from cs336_basics.utils import softmax
 
-EOF_TOKEN = "<|endoftext|>"
-
 def decode(input: str, 
            model: TransformerLM, 
            tokenizer: Tokenizer, 
@@ -17,13 +15,13 @@ def decode(input: str,
     '''
     Generate completions for a user-provided prompt.
     '''
-    device = model.device
+    device = next(model.parameters()).device
     token_ids = tokenizer.encode(input)
     with torch.no_grad():
         for _ in range(max_num_tokens):
             # list[int] -> (batch_size=1, sequence_length)
             input_ids = torch.tensor(
-                token_ids,
+                token_ids[-model.context_length :],
                 dtype=torch.long,
                 device=device,
             ).unsqueeze(0)
