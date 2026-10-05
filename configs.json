@@ -30,6 +30,7 @@
   },
 
   "training": {
+    "seed": 42,
     "batch_size": 64,
     "max_iters": 20000,
     "gradient_clip_max_norm": 1.0,
@@ -37,6 +38,7 @@
   },
 
   "evaluation": {
+    "seed": 123,
     "interval": 800,
     "num_eval_batches": 20
   },

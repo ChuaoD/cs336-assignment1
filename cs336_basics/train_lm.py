@@ -62,6 +62,11 @@ def train(config_path: Path, learning_rate: float | None = None):
     gradient_clip_max_norm = training_config["gradient_clip_max_norm"]
     device = training_config["device"]
 
+    # Start fresh runs with the same model weights and training sample sequence.
+    training_seed = training_config.get("seed", 42)
+    torch.manual_seed(training_seed)
+    np.random.seed(training_seed)
+
     # Construct model and optimizer
     context_length = config["model"]["context_length"]
     model = TransformerLM(**config["model"], device=device)
@@ -88,6 +93,13 @@ def train(config_path: Path, learning_rate: float | None = None):
     # Read evaluation configuration
     eval_interval = config["evaluation"]["interval"]
     num_eval_batches = config["evaluation"]["num_eval_batches"]
+    evaluation_seed = config["evaluation"].get("seed", 123)
+    validation_rng = np.random.default_rng(evaluation_seed)
+    # Sample once on CPU without advancing the training random state.
+    validation_batches = [
+        load_data(validation_data, batch_size, context_length, "cpu", rng=validation_rng)
+        for _ in range(num_eval_batches)
+    ]
 
     # Read logging configuration
     logging_config = config["logging"]
@@ -103,7 +115,9 @@ def train(config_path: Path, learning_rate: float | None = None):
         config={
             "batch_size": batch_size,
             "learning_rate": lr,
-            "max_iters": max_iters  
+            "max_iters": max_iters,
+            "training_seed": training_seed,
+            "evaluation_seed": evaluation_seed,
         }, 
         mode=wandb_mode,
     )
@@ -163,8 +177,9 @@ def train(config_path: Path, learning_rate: float | None = None):
             model.eval()
             with torch.no_grad():
                 total_valid_loss = 0
-                for _ in range(num_eval_batches):
-                    valid_inputs, valid_targets = load_data(validation_data, batch_size, context_length, device)
+                for cpu_inputs, cpu_targets in validation_batches:
+                    valid_inputs = cpu_inputs.to(device)
+                    valid_targets = cpu_targets.to(device)
 
                     valid_logits = model(valid_inputs)
                     valid_loss = cross_entropy_loss(valid_logits, valid_targets)
