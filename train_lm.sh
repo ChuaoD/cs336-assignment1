@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=train-lm
-#SBATCH --account=mp309_g
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --constraint=gpu
 #SBATCH --qos=shared
 #SBATCH --time=02:00:00
@@ -17,12 +17,12 @@ cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
 export SLURM_CPU_BIND=cores
 export PYTHONUNBUFFERED=1
 
-export WANDB_DIR="$PSCRATCH/cs336-assignment1/wandb"
-export WANDB_CACHE_DIR="$PSCRATCH/.cache/wandb"
-export WANDB_DATA_DIR="$PSCRATCH/.cache/wandb-data"
+export WANDB_DIR="$SCRATCH/cs336-assignment1/wandb"
+export WANDB_CACHE_DIR="$SCRATCH/.cache/wandb"
+export WANDB_DATA_DIR="$SCRATCH/.cache/wandb-data"
 
 mkdir -p \
-    "$PSCRATCH/cs336-assignment1/checkpoints" \
+    "$SCRATCH/cs336-assignment1/checkpoints" \
     "$WANDB_DIR" \
     "$WANDB_CACHE_DIR" \
     "$WANDB_DATA_DIR"

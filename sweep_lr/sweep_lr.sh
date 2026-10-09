@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lr-sweep-4gpu
-#SBATCH --account=mp309_g
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --constraint=gpu
 #SBATCH --qos=regular
 #SBATCH --nodes=1
@@ -17,16 +17,16 @@ cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
 export SLURM_CPU_BIND=cores
 export PYTHONUNBUFFERED=1
 
-export UV_CACHE_DIR="$PSCRATCH/.cache/uv"
-export WANDB_DIR="$PSCRATCH/cs336-assignment1/wandb"
-export WANDB_CACHE_DIR="$PSCRATCH/.cache/wandb"
-export WANDB_DATA_DIR="$PSCRATCH/.cache/wandb-data"
+export UV_CACHE_DIR="$SCRATCH/.cache/uv"
+export WANDB_DIR="$SCRATCH/cs336-assignment1/wandb"
+export WANDB_CACHE_DIR="$SCRATCH/.cache/wandb"
+export WANDB_DATA_DIR="$SCRATCH/.cache/wandb-data"
 
 mkdir -p "$UV_CACHE_DIR"
 mkdir -p "$WANDB_DIR"
 mkdir -p "$WANDB_CACHE_DIR"
 mkdir -p "$WANDB_DATA_DIR"
-mkdir -p "$PSCRATCH/cs336-assignment1/checkpoints"
+mkdir -p "$SCRATCH/cs336-assignment1/checkpoints"
 
 : "${SWEEP_ID:?Submit with SWEEP_ID set}"
 
@@ -42,7 +42,7 @@ for agent_number in 1 2 3 4; do
         --gpu-bind=single:1 \
         --output="slurm-lr-sweep-${SLURM_JOB_ID}-agent-${agent_number}.out" \
         --error="slurm-lr-sweep-${SLURM_JOB_ID}-agent-${agent_number}.err" \
-        .venv/bin/wandb agent --count 1 "$SWEEP_ID" &
+        .venv/bin/python -m wandb agent --count 1 "$SWEEP_ID" &
 
     pids+=("$!")
 done

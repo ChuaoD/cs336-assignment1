@@ -45,7 +45,7 @@
 
   "checkpoint": {
     "interval": 5000,
-    "output_dir": "/pscratch/sd/c/chuao/cs336-assignment1/checkpoints",
+    "output_dir": "checkpoints",
     "resume_from": null
   },
 
