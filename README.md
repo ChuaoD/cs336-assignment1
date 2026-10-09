@@ -129,7 +129,7 @@ uv run python -m cs336_basics.train_overfit --config_path configs_overfit.json
 
 ### 4. Submit a sweep with Slurm
 
-Adjust the Slurm account and resource settings for your allocation. The checked-in [sweep definition](sweep_lr/sweep_lr.yaml) lists a different learning-rate grid. To reproduce the reported experiment, change its `parameters.learning_rate.values` to `[0.0003, 0.001, 0.003, 0.005]` before creating the sweep. The [launcher](sweep_lr/sweep_lr.sh) starts four agents with one experiment each, matching this four-setting experiment; expand the launcher as well as the YAML if adding settings.
+Adjust the Slurm account and resource settings for your allocation. The checked-in [sweep definition](sweep_lr/sweep_lr.yaml) contains the reported grid, `[0.0003, 0.001, 0.003, 0.005]`. The [launcher](sweep_lr/sweep_lr.sh) starts four agents with one experiment each, matching this four-setting experiment; expand the launcher as well as the YAML if adding settings.
 
 Create a fresh sweep, then substitute the full identifier printed by W&B:
 
